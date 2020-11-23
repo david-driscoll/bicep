@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,12 +36,16 @@ namespace Bicep.LanguageServer.Handlers
 
             this.compilationManager.UpsertCompilation(request.TextDocument.Uri, request.TextDocument.Version, contents);
 
+            Console.WriteLine(request.TextDocument.Uri.ToString());
+
             return Unit.Task;
         }
 
         public override Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
         {
             this.compilationManager.UpsertCompilation(request.TextDocument.Uri, request.TextDocument.Version, request.TextDocument.Text);
+
+            Console.WriteLine(request.TextDocument.Uri.ToString());
             
             return Unit.Task;
         }

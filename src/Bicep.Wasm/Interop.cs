@@ -17,6 +17,17 @@ using Bicep.Core.FileSystem;
 using Bicep.Core.Workspaces;
 using Bicep.Core.Extensions;
 using Bicep.Decompiler;
+using System.IO.Pipelines;
+using Bicep.LanguageServer;
+using SemanticTokenVisitor = Bicep.Wasm.LanguageHelpers.SemanticTokenVisitor;
+using System.Text;
+using System.Threading.Tasks;
+using System.Threading;
+using System.Buffers;
+using StreamJsonRpc;
+using StreamJsonRpc.Protocol;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Bicep.Wasm
 {
@@ -25,10 +36,24 @@ namespace Bicep.Wasm
         private static readonly IResourceTypeProvider resourceTypeProvider = new AzResourceTypeProvider();
 
         private readonly IJSRuntime jsRuntime;
+        private readonly Server server;
+        private readonly PipeWriter inputWriter;
+        private readonly HeaderDelimitedMessageHandler messageHandler;
 
         public Interop(IJSRuntime jsRuntime)
         {
             this.jsRuntime = jsRuntime;
+            var inputPipe = new Pipe();
+            var outputPipe = new Pipe();
+            server = new Server(inputPipe.Reader, outputPipe.Writer, new Server.CreationOptions {
+                FileResolver = new FileResolver(),
+                ResourceTypeProvider = resourceTypeProvider,
+            });
+            inputWriter = inputPipe.Writer;
+            messageHandler = new HeaderDelimitedMessageHandler(inputPipe.Writer, outputPipe.Reader, new JsonMessageFormatter())
+            {
+                Encoding = Encoding.UTF8,
+            };
         }
 
         [JSInvokable]
@@ -44,6 +69,52 @@ namespace Bicep.Wasm
         }
 
         public record DecompileResult(string? bicepFile, string? error);
+
+        [JSInvokable]
+        public async Task MakeLspRequestAsync(string jsonContent)
+        {
+            var cancelToken = CancellationToken.None;
+
+            Console.WriteLine(jsonContent);
+            await messageHandler.WriteAsync(JsonConvert.DeserializeObject<JsonRpcRequest>(jsonContent), cancelToken);
+        }
+
+        [JSInvokable]
+        public async Task RunLspMessageLoopAsync()
+        {
+            var cancelToken = CancellationToken.None;
+
+            async Task MessageLoop()
+            {
+                while (true)
+                {
+                    try {
+                        Console.WriteLine("reading loop");
+
+                        var message = await messageHandler.ReadAsync(cancelToken);
+                        Console.WriteLine("reading loop 2");
+                        if (message == null)
+                        {
+                            Console.WriteLine("reading loop 3");
+                            continue;
+                        }
+
+                        Console.WriteLine("reading loop 4" + message.ToString());
+
+                        await jsRuntime.InvokeVoidAsync("ReceiveLspRequest", JsonConvert.SerializeObject(message));
+                    }
+                    catch (Exception exception)
+                    {
+                        Console.WriteLine($"reading {exception}");
+                        throw;
+                    }
+                }
+            }
+
+            await Task.WhenAll(
+                server.RunAsync(cancelToken),
+                MessageLoop());
+        }
 
         [JSInvokable]
         public DecompileResult Decompile(string jsonContent)

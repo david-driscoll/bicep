@@ -15,11 +15,36 @@ using Bicep.LanguageServer.Completions;
 using Bicep.LanguageServer.Handlers;
 using Bicep.LanguageServer.Providers;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Server;
 using OmnisharpLanguageServer = OmniSharp.Extensions.LanguageServer.Server.LanguageServer;
 
 namespace Bicep.LanguageServer
 {
+    public class TestLoggerFactory : ILoggerFactory
+    {
+        private class TestLogger : ILogger
+        {
+            private class Scope : IDisposable
+            {
+                public void Dispose() {}
+            }
+
+            public IDisposable BeginScope<TState>(TState state) => new Scope();
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+                => Console.WriteLine($"[{logLevel}] {formatter(state, exception)}");
+        }
+
+        public void AddProvider(ILoggerProvider provider) {}
+
+        public ILogger CreateLogger(string categoryName) => new TestLogger();
+
+        public void Dispose() {}
+    }
+
     public class Server
     {
         public class CreationOptions
@@ -63,15 +88,29 @@ namespace Bicep.LanguageServer
 #pragma warning restore 0612
                     .WithServices(services => RegisterServices(creationOptions, services));
 
+                options.WithLoggerFactory(new TestLoggerFactory());
+
                 onOptionsFunc(options);
             });
         }
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
-            await server.Initialize(cancellationToken);
+            try {
+                Console.WriteLine("RunAsync: Running!");
 
-            await server.WaitForExit;
+                await server.Initialize(cancellationToken);
+
+                Console.WriteLine("RunAsync: Initialized!");
+
+                await server.WaitForExit;
+
+                Console.WriteLine("RunAsync: Exited!");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"RunAsync: {exception}!");
+            }
         }
 
         private static void RegisterServices(CreationOptions creationOptions, IServiceCollection services)

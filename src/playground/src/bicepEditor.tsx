@@ -1,12 +1,29 @@
 import * as monacoEditor from 'monaco-editor';
+import { CloseAction, createConnection, ErrorAction, MonacoLanguageClient, MonacoServices } from 'monaco-languageclient';
 import React, { useRef, useState } from 'react';
 import MonacoEditor from 'react-monaco-editor';
-import { compileAndEmitDiagnostics, getSemanticTokens, getSemanticTokensLegend } from './lspInterop';
+import { makeLspRequest, runLspMessageLoop } from './lspInterop';
+import { createMessageConnection, Message } from 'vscode-jsonrpc';
+import { AbstractMessageReader, DataCallback, } from 'vscode-jsonrpc/lib/messageReader';
+import { AbstractMessageWriter } from 'vscode-jsonrpc/lib/messageWriter';
+import { SemanticTokensFeature } from 'vscode-languageclient/lib/semanticTokens.proposed';
 
 interface Props {
   initialCode: string,
   onBicepChange: (bicepContent: string) => void,
   onJsonChange: (jsonContent: string) => void,
+}
+
+class InteropMessageWriter extends AbstractMessageWriter {
+  write(message: Message): void {
+    makeLspRequest(JSON.stringify(message));
+  }
+}
+
+class InteropMessageReader extends AbstractMessageReader {
+  listen(callback: DataCallback): void {
+    runLspMessageLoop(message => callback(JSON.parse(message)));
+  }
 }
 
 function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEditor, monaco: typeof monacoEditor) {
@@ -16,11 +33,26 @@ function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEdit
     aliases: ['bicep'],
   });
 
-  monaco.languages.registerDocumentSemanticTokensProvider('bicep', {
-    getLegend: () => getSemanticTokensLegend(),
-    provideDocumentSemanticTokens: (model, lastResultId, token) => getSemanticTokens(model.getValue()),
-    releaseDocumentSemanticTokens: () => { }
+  MonacoServices.install(editor);
+  const messageConnection = createMessageConnection(new InteropMessageReader(), new InteropMessageWriter());
+  const client = new MonacoLanguageClient({
+    name: "Bicep Monaco Client",
+    clientOptions: {
+      documentSelector: [{ language: 'bicep' }],
+      errorHandler: {
+        error: () => ErrorAction.Continue,
+        closed: () => CloseAction.DoNotRestart
+      }
+    },
+    connectionProvider: {
+      get: (errorHandler, closeHandler) => {
+        return Promise.resolve(createConnection(messageConnection, errorHandler, closeHandler))
+      }
+    }
   });
+  
+  client.registerFeature(new SemanticTokensFeature(client));
+  client.start();
 
   // @ts-expect-error
   editor._themeService._theme.getTokenStyleMetadata = (type, modifiers) => {
@@ -65,7 +97,11 @@ function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEdit
   };
 }
 
-export const BicepEditor : React.FC<Props> = (props) => {
+export const BicepEditor: React.FC<Props> = (props) => {
+  const monacoRef = useRef<MonacoEditor>();
+  const [initialCode, setInitialCode] = useState(props.initialCode);
+  const [bicepContent, setBicepContent] = useState(props.initialCode);
+
   const options: monacoEditor.editor.IStandaloneEditorConstructionOptions = {
     scrollBeyondLastLine: false,
     automaticLayout: true,
@@ -75,16 +111,20 @@ export const BicepEditor : React.FC<Props> = (props) => {
     'semanticHighlighting.enabled': true,
   };
 
-  const monacoRef = useRef<MonacoEditor>();
-  const [initialCode, setInitialCode] = useState(props.initialCode);
-  const [bicepContent, setBicepContent] = useState(props.initialCode);
-
   const handleContentChange = (editor: monacoEditor.editor.IStandaloneCodeEditor, text: string) => {
     setBicepContent(text);
-    const { template, diagnostics } = compileAndEmitDiagnostics(text);
-    monacoEditor.editor.setModelMarkers(editor.getModel(), 'default', diagnostics);
-    props.onBicepChange(text);
-    props.onJsonChange(template);
+    makeLspRequest(JSON.stringify({
+      "jsonrpc":"2.0",
+      "method":"textDocument/didOpen",
+      "params": {
+          "textDocument": {
+              "uri": "inmemory:///main.bicep",
+              "languageId": "bicep",
+              "version": 1,
+              "text": editor.getModel().getValue(),
+          }
+      }
+    }));
   }
 
   const handleEditorDidMount = (editor: monacoEditor.editor.IStandaloneCodeEditor, monaco: typeof monacoEditor) => {
@@ -98,8 +138,8 @@ export const BicepEditor : React.FC<Props> = (props) => {
 
     // clear the selection after this completes
     setTimeout(() => {
-      monacoRef.current.editor.setSelection({startColumn: 1, startLineNumber: 1, endColumn: 1, endLineNumber: 1});
-      monacoRef.current.editor.setScrollPosition({scrollLeft: 0, scrollTop: 0});
+      monacoRef.current.editor.setSelection({ startColumn: 1, startLineNumber: 1, endColumn: 1, endLineNumber: 1 });
+      monacoRef.current.editor.setScrollPosition({ scrollLeft: 0, scrollTop: 0 });
     }, 0);
   }
 

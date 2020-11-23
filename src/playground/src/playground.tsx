@@ -11,6 +11,8 @@ import { decompile } from './lspInterop';
 let initialFile = examples['101/1vm-2nics-2subnets-1vnet'];
 handleShareLink(content => initialFile = content ?? initialFile);
 
+let looprunning = false;
+
 export const Playground : React.FC = () => {
   const [jsonContent, setJsonContent] = useState('');
   const [bicepContent, setBicepContent] = useState('');

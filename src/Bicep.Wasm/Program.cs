@@ -3,6 +3,7 @@
 
 using System;
 using System.Net.Http;
+using System.Reactive.PlatformServices;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -16,6 +17,10 @@ namespace Bicep.Wasm
     {
         public static async Task Main(string[] args)
         {
+#pragma warning disable CS0618
+            PlatformEnlightenmentProvider.Current.EnableWasm();
+#pragma warning restore CS0618
+
             var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
             var jsRuntime = builder.Services.BuildServiceProvider().GetService<IJSRuntime>() ?? throw new InvalidOperationException("Unable to obtain JS runtime.");

@@ -25,6 +25,27 @@ export function compileAndEmitDiagnostics(content: string): {template: string, d
   return interop.invokeMethod('CompileAndEmitDiagnostics', content);
 }
 
+export async function makeLspRequest(jsonRpcRequest: string) {
+  console.log(`SND: ${jsonRpcRequest}`);
+  return await interop.invokeMethodAsync('MakeLspRequestAsync', jsonRpcRequest);
+}
+
+export async function runLspMessageLoop(onMessage: (message: string) => void) {
+  self['ReceiveLspRequest'] = (message: string) => {
+    console.log(`RCV: ${message}`);
+    onMessage(message);
+  };
+  try {
+    const result = await interop.invokeMethodAsync('RunLspMessageLoopAsync');
+    console.log(`result: ${result}`);
+    return result;
+  }
+  catch {
+    console.log('sadfsdf');
+    throw 'failure';
+  }
+}
+
 export function decompile(jsonContent: string): string {
   const { bicepFile, error } = interop.invokeMethod('Decompile', jsonContent);
 
