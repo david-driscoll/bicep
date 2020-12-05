@@ -14,6 +14,7 @@ using Bicep.Core.Syntax;
 using Bicep.Core.TypeSystem;
 using Bicep.LanguageServer.Extensions;
 using Bicep.LanguageServer.Snippets;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using SymbolKind = Bicep.Core.Semantics.SymbolKind;
@@ -50,7 +51,7 @@ namespace Bicep.LanguageServer.Completions
             if (context.Kind.HasFlag(BicepCompletionContextKind.DeclarationStart))
             {
                 yield return CreateKeywordCompletion(LanguageConstants.ParameterKeyword, "Parameter keyword", context.ReplacementRange);
-                
+
                 yield return CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration", "param ${1:Identifier} ${2:Type}", context.ReplacementRange);
                 yield return CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with default value", "param ${1:Identifier} ${2:Type} = ${3:DefaultValue}", context.ReplacementRange);
                 yield return CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with default and allowed values", @"param ${1:Identifier} ${2:Type} {
@@ -108,7 +109,7 @@ namespace Bicep.LanguageServer.Completions
 
         private IEnumerable<CompletionItem> GetTargetScopeCompletions(SemanticModel model, BicepCompletionContext context)
         {
-            return context.Kind.HasFlag(BicepCompletionContextKind.TargetScope) && context.TargetScope is {} targetScope
+            return context.Kind.HasFlag(BicepCompletionContextKind.TargetScope) && context.TargetScope is { } targetScope
                 ? GetValueCompletionsForType(model.GetDeclaredType(targetScope), context.ReplacementRange)
                 : Enumerable.Empty<CompletionItem>();
         }
@@ -192,7 +193,7 @@ namespace Bicep.LanguageServer.Completions
             // maps insert text to the completion item
             var completions = new Dictionary<string, CompletionItem>();
 
-            var enclosingDeclarationSymbol = context.EnclosingDeclaration == null 
+            var enclosingDeclarationSymbol = context.EnclosingDeclaration == null
                 ? null
                 : model.GetSymbolInfo(context.EnclosingDeclaration);
 
@@ -215,7 +216,7 @@ namespace Bicep.LanguageServer.Completions
             // add namespaces first
             AddSymbolCompletions(completions, model.Root.ImportedNamespaces.Values);
 
-            // add the non-output declarations with valid identifiers 
+            // add the non-output declarations with valid identifiers
             AddSymbolCompletions(completions, model.Root.AllDeclarations.Where(decl => decl.NameSyntax.IsValid && !(decl is OutputSymbol)));
 
             // get names of functions that always require to be fully qualified due to clashes between namespaces
@@ -347,7 +348,7 @@ namespace Bicep.LanguageServer.Completions
             }
 
             var declaredTypeAssignment = GetDeclaredTypeAssignment(model, context.Property);
-            if(declaredTypeAssignment == null)
+            if (declaredTypeAssignment == null)
             {
                 return Enumerable.Empty<CompletionItem>();
             }
@@ -378,7 +379,7 @@ namespace Bicep.LanguageServer.Completions
                 case PrimitiveType _ when ReferenceEquals(propertyType, LanguageConstants.Bool):
                     yield return CreateKeywordCompletion(LanguageConstants.TrueKeyword, LanguageConstants.TrueKeyword, replacementRange, preselect: true, CompletionPriority.High);
                     yield return CreateKeywordCompletion(LanguageConstants.FalseKeyword, LanguageConstants.FalseKeyword, replacementRange, preselect: true, CompletionPriority.High);
-                    
+
                     break;
 
                 case StringLiteralType stringLiteral:
@@ -399,7 +400,7 @@ namespace Bicep.LanguageServer.Completions
                         .WithDetail(arrayLabel)
                         .Preselect()
                         .WithSortText(GetSortText(arrayLabel, CompletionPriority.High));
-                    
+
                     break;
 
                 case DiscriminatedObjectType _:

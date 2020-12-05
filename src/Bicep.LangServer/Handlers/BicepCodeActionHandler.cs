@@ -9,6 +9,7 @@ using Bicep.LanguageServer.CompilationManager;
 using Bicep.LanguageServer.Extensions;
 using Bicep.LanguageServer.Utils;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
@@ -19,11 +20,10 @@ namespace Bicep.LanguageServer.Handlers
         private readonly ICompilationManager compilationManager;
 
         public BicepCodeActionHandler(ICompilationManager compilationManager)
-            : base(CreateCodeActionRegistrationOptions())
         {
             this.compilationManager = compilationManager;
         }
-        
+
         public override Task<CommandOrCodeActionContainer> Handle(CodeActionParams request, CancellationToken cancellationToken)
         {
             var compilationContext = this.compilationManager.GetCompilation(request.TextDocument.Uri);
@@ -77,7 +77,7 @@ namespace Bicep.LanguageServer.Handlers
             };
         }
 
-        private static CodeActionRegistrationOptions CreateCodeActionRegistrationOptions() => new CodeActionRegistrationOptions
+        protected override CodeActionRegistrationOptions CreateRegistrationOptions(CodeActionCapability capability, ClientCapabilities clientCapabilities) => new CodeActionRegistrationOptions
         {
             DocumentSelector = DocumentSelectorFactory.Create(),
             CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix),

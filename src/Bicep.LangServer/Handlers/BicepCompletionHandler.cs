@@ -6,18 +6,18 @@ using System.Threading.Tasks;
 using Bicep.LanguageServer.CompilationManager;
 using Bicep.LanguageServer.Completions;
 using Bicep.LanguageServer.Utils;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Bicep.LanguageServer.Handlers
 {
-    public class BicepCompletionHandler : CompletionHandler
+    public class BicepCompletionHandler : CompletionHandlerBase
     {
         private readonly ICompilationManager compilationManager;
         private readonly ICompletionProvider completionProvider;
 
         public BicepCompletionHandler(ICompilationManager compilationManager, ICompletionProvider completionProvider)
-            : base(CreateRegistrationOptions())
         {
             this.compilationManager = compilationManager;
             this.completionProvider = completionProvider;
@@ -25,7 +25,7 @@ namespace Bicep.LanguageServer.Handlers
 
         public override Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
         {
-            var compilationContext = this.compilationManager.GetCompilation(request.TextDocument.Uri);
+            var compilationContext = compilationManager.GetCompilation(request.TextDocument.Uri);
             if (compilationContext == null)
             {
                 return Task.FromResult(new CompletionList());
@@ -34,7 +34,7 @@ namespace Bicep.LanguageServer.Handlers
             int offset = PositionHelper.GetOffset(compilationContext.LineStarts, request.Position);
             var completionContext = BicepCompletionContext.Create(compilationContext.Compilation.SyntaxTreeGrouping.EntryPoint, offset);
             var completions = this.completionProvider.GetFilteredCompletions(compilationContext.Compilation, completionContext);
-            
+
             return Task.FromResult(new CompletionList(completions, isIncomplete: false));
         }
 
@@ -43,7 +43,7 @@ namespace Bicep.LanguageServer.Handlers
             return Task.FromResult(request);
         }
 
-        private static CompletionRegistrationOptions CreateRegistrationOptions() => new CompletionRegistrationOptions
+        protected override CompletionRegistrationOptions CreateRegistrationOptions(CompletionCapability capability, ClientCapabilities clientCapabilities) => new CompletionRegistrationOptions
         {
             DocumentSelector = DocumentSelectorFactory.Create(),
             AllCommitCharacters = new Container<string>(),

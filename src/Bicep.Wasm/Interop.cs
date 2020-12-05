@@ -28,6 +28,8 @@ using StreamJsonRpc;
 using StreamJsonRpc.Protocol;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Microsoft.Extensions.DependencyInjection;
+using System.Reactive.Concurrency;
 
 namespace Bicep.Wasm
 {
@@ -38,29 +40,32 @@ namespace Bicep.Wasm
         private readonly IJSRuntime jsRuntime;
         private readonly Server server;
         private readonly PipeWriter inputWriter;
-        private readonly HeaderDelimitedMessageHandler messageHandler;
+        private readonly PipeReader outputReader;
 
         public Interop(IJSRuntime jsRuntime)
         {
             this.jsRuntime = jsRuntime;
             var inputPipe = new Pipe();
             var outputPipe = new Pipe();
-            server = new Server(inputPipe.Reader, outputPipe.Writer, new Server.CreationOptions {
+            server = new Server(inputPipe.Reader, outputPipe.Writer, new Server.CreationOptions
+            {
                 FileResolver = new FileResolver(),
                 ResourceTypeProvider = resourceTypeProvider,
+                Services = new ServiceCollection().AddSingleton<IScheduler>(WasmScheduler.Default),
             });
             inputWriter = inputPipe.Writer;
-            messageHandler = new HeaderDelimitedMessageHandler(inputPipe.Writer, outputPipe.Reader, new JsonMessageFormatter())
-            {
-                Encoding = Encoding.UTF8,
-            };
+            outputReader = outputPipe.Reader;
+#pragma warning disable VSTHRD110
+            Task.Run(() => server.RunAsync(CancellationToken.None));
+            Task.Run(() => ProcessInputStreamAsync());
+#pragma warning restore VSTHRD110
         }
 
         [JSInvokable]
         public object CompileAndEmitDiagnostics(string content)
         {
             var (output, diagnostics) = CompileInternal(content);
-            
+
             return new
             {
                 template = output,
@@ -71,49 +76,43 @@ namespace Bicep.Wasm
         public record DecompileResult(string? bicepFile, string? error);
 
         [JSInvokable]
-        public async Task MakeLspRequestAsync(string jsonContent)
+        public async Task SendLspDataAsync(string jsonContent)
         {
             var cancelToken = CancellationToken.None;
 
             Console.WriteLine(jsonContent);
-            await messageHandler.WriteAsync(JsonConvert.DeserializeObject<JsonRpcRequest>(jsonContent), cancelToken);
+            await inputWriter.WriteAsync(Encoding.UTF8.GetBytes(jsonContent)).ConfigureAwait(false);
         }
 
-        [JSInvokable]
-        public async Task RunLspMessageLoopAsync()
+        internal async Task ProcessInputStreamAsync()
         {
-            var cancelToken = CancellationToken.None;
-
-            async Task MessageLoop()
+            try
             {
-                while (true)
+                do
                 {
-                    try {
-                        Console.WriteLine("reading loop");
+                    var result = await outputReader.ReadAsync(CancellationToken.None).ConfigureAwait(false);
+                    var buffer = result.Buffer;
+                    Console.WriteLine("receiveLspData");
+                    await jsRuntime.InvokeVoidAsync("receiveLspData", Encoding.UTF8.GetString(buffer.Slice(buffer.Start, buffer.End)));
+                    outputReader.AdvanceTo(buffer.End, buffer.End);
 
-                        var message = await messageHandler.ReadAsync(cancelToken);
-                        Console.WriteLine("reading loop 2");
-                        if (message == null)
-                        {
-                            Console.WriteLine("reading loop 3");
-                            continue;
-                        }
-
-                        Console.WriteLine("reading loop 4" + message.ToString());
-
-                        await jsRuntime.InvokeVoidAsync("ReceiveLspRequest", JsonConvert.SerializeObject(message));
-                    }
-                    catch (Exception exception)
+                    Console.WriteLine($"result.IsCompleted: {result.IsCompleted}");
+                    Console.WriteLine($"buffer.IsEmpty: {buffer.IsEmpty}");
+                    // Stop reading if there's no more data coming.
+                    if (result.IsCompleted && buffer.IsEmpty)
                     {
-                        Console.WriteLine($"reading {exception}");
-                        throw;
+                        break;
                     }
-                }
+                    // TODO: Add cancellation token
+                } while (!CancellationToken.None.IsCancellationRequested);
             }
-
-            await Task.WhenAll(
-                server.RunAsync(cancelToken),
-                MessageLoop());
+            catch (Exception e)
+            {
+                // TODO: Needed?
+                await Console.Error.WriteLineAsync(e.Message);
+                await Console.Error.WriteLineAsync(e.StackTrace);
+            }
+            Console.WriteLine($"ended");
         }
 
         [JSInvokable]
@@ -121,7 +120,8 @@ namespace Bicep.Wasm
         {
             var jsonUri = new Uri("inmemory:///main.json");
 
-            var fileResolver = new InMemoryFileResolver(new Dictionary<Uri, string> {
+            var fileResolver = new InMemoryFileResolver(new Dictionary<Uri, string>
+            {
                 [jsonUri] = jsonContent,
             });
 
@@ -143,7 +143,8 @@ namespace Bicep.Wasm
             var tokenTypes = Enum.GetValues(typeof(SemanticTokenType)).Cast<SemanticTokenType>();
             var tokenStrings = tokenTypes.OrderBy(t => (int)t).Select(t => t.ToString().ToLowerInvariant());
 
-            return new {
+            return new
+            {
                 tokenModifiers = new string[] { },
                 tokenTypes = tokenStrings.ToArray(),
             };
@@ -157,16 +158,22 @@ namespace Bicep.Wasm
 
             var data = new List<int>();
             SemanticToken? prevToken = null;
-            foreach (var token in tokens) {
-                if (prevToken == null) {
+            foreach (var token in tokens)
+            {
+                if (prevToken == null)
+                {
                     data.Add(token.Line);
                     data.Add(token.Character);
                     data.Add(token.Length);
-                } else if (prevToken.Line != token.Line) {
+                }
+                else if (prevToken.Line != token.Line)
+                {
                     data.Add(token.Line - prevToken.Line);
                     data.Add(token.Character);
                     data.Add(token.Length);
-                } else {
+                }
+                else
+                {
                     data.Add(0);
                     data.Add(token.Character - prevToken.Character);
                     data.Add(token.Length);
@@ -178,7 +185,8 @@ namespace Bicep.Wasm
                 prevToken = token;
             }
 
-            return new {
+            return new
+            {
                 data = data.ToArray(),
             };
         }
@@ -234,7 +242,8 @@ namespace Bicep.Wasm
             var (startLine, startChar) = TextCoordinateConverter.GetPosition(lineStarts, diagnostic.Span.Position);
             var (endLine, endChar) = TextCoordinateConverter.GetPosition(lineStarts, diagnostic.Span.Position + diagnostic.Span.Length);
 
-            return new {
+            return new
+            {
                 code = diagnostic.Code,
                 message = diagnostic.Message,
                 severity = ToMonacoSeverity(diagnostic.Level),
@@ -246,7 +255,8 @@ namespace Bicep.Wasm
         }
 
         private static int ToMonacoSeverity(DiagnosticLevel level)
-            => level switch {
+            => level switch
+            {
                 DiagnosticLevel.Info => 2,
                 DiagnosticLevel.Warning => 4,
                 DiagnosticLevel.Error => 8,

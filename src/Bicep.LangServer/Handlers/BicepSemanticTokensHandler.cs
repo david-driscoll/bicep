@@ -20,7 +20,6 @@ namespace Bicep.LanguageServer.Handlers
         private readonly ICompilationManager compilationManager;
 
         public BicepSemanticTokensHandler(ILogger<BicepSemanticTokensHandler> logger, ICompilationManager compilationManager)
-            : base(GetSemanticTokensRegistrationOptions())
         {
             this.logger = logger;
             this.compilationManager = compilationManager;
@@ -28,7 +27,7 @@ namespace Bicep.LanguageServer.Handlers
 
         protected override Task<SemanticTokensDocument> GetSemanticTokensDocument(ITextDocumentIdentifierParams @params, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new SemanticTokensDocument(GetRegistrationOptions().Legend));
+            return Task.FromResult(new SemanticTokensDocument(RegistrationOptions.Legend));
         }
 
         protected override Task Tokenize(SemanticTokensBuilder builder, ITextDocumentIdentifierParams identifier, CancellationToken cancellationToken)
@@ -43,7 +42,7 @@ namespace Bicep.LanguageServer.Handlers
             return Task.CompletedTask;
         }
 
-        private static SemanticTokensRegistrationOptions GetSemanticTokensRegistrationOptions()
+        protected override SemanticTokensRegistrationOptions CreateRegistrationOptions(SemanticTokensCapability capability, ClientCapabilities clientCapabilities)
         {
             return new SemanticTokensRegistrationOptions
             {

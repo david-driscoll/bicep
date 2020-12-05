@@ -1,12 +1,13 @@
 import * as monacoEditor from 'monaco-editor';
-import { CloseAction, createConnection, ErrorAction, MonacoLanguageClient, MonacoServices } from 'monaco-languageclient';
+import { CloseAction, createConnection, DidOpenTextDocumentNotification, ErrorAction, MonacoLanguageClient, MonacoServices, TextDocumentFeature } from 'monaco-languageclient';
 import React, { useRef, useState } from 'react';
 import MonacoEditor from 'react-monaco-editor';
-import { makeLspRequest, runLspMessageLoop } from './lspInterop';
-import { createMessageConnection, Message } from 'vscode-jsonrpc';
-import { AbstractMessageReader, DataCallback, } from 'vscode-jsonrpc/lib/messageReader';
-import { AbstractMessageWriter } from 'vscode-jsonrpc/lib/messageWriter';
+import { makeLspRequest } from './lspInterop';
+import { createMessageConnection, Message, Trace, TraceFormat } from 'vscode-jsonrpc';
+import { AbstractMessageReader, DataCallback, StreamMessageReader, } from 'vscode-jsonrpc/lib/messageReader';
+import { AbstractMessageWriter, StreamMessageWriter } from 'vscode-jsonrpc/lib/messageWriter';
 import { SemanticTokensFeature } from 'vscode-languageclient/lib/semanticTokens.proposed';
+import { Readable, Writable, Duplex } from 'stream'
 
 interface Props {
   initialCode: string,
@@ -14,16 +15,26 @@ interface Props {
   onJsonChange: (jsonContent: string) => void,
 }
 
-class InteropMessageWriter extends AbstractMessageWriter {
-  write(message: Message): void {
-    makeLspRequest(JSON.stringify(message));
-  }
+function marshalToString(data : any, encoding: BufferEncoding | 'buffer') {
+  return Buffer.isBuffer(data) ? data.toString(encoding === 'buffer' ? undefined : encoding) : typeof data === 'string' ? data : data.toString();
 }
 
-class InteropMessageReader extends AbstractMessageReader {
-  listen(callback: DataCallback): void {
-    runLspMessageLoop(message => callback(JSON.parse(message)));
-  }
+function createStream() {
+  const output = new Duplex({
+    write: (data, encoding, cb) => {
+      makeLspRequest(marshalToString(data, encoding));
+      cb();
+    },
+    read(size: number) {
+    }
+  });
+
+  self['receiveLspData'] = (data: string | Buffer) => {
+    console.log(`RCV: ${data}`);
+    output.push(marshalToString(data, 'utf8'));
+  };
+
+  return [new StreamMessageReader(output, 'utf8'), new StreamMessageWriter(output, 'utf8')] as const;
 }
 
 function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEditor, monaco: typeof monacoEditor) {
@@ -34,15 +45,21 @@ function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEdit
   });
 
   MonacoServices.install(editor);
-  const messageConnection = createMessageConnection(new InteropMessageReader(), new InteropMessageWriter());
+
+
+  const [reader, writer] = createStream();
+  const messageConnection = createMessageConnection(reader, writer);
   const client = new MonacoLanguageClient({
     name: "Bicep Monaco Client",
     clientOptions: {
+      initializationOptions: {
+
+      },
       documentSelector: [{ language: 'bicep' }],
       errorHandler: {
         error: () => ErrorAction.Continue,
         closed: () => CloseAction.DoNotRestart
-      }
+      },
     },
     connectionProvider: {
       get: (errorHandler, closeHandler) => {
@@ -50,7 +67,10 @@ function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEdit
       }
     }
   });
-  
+(client as any)._trace = Trace.Verbose;
+(client as any)._traceFormat = TraceFormat.Text;
+
+
   client.registerFeature(new SemanticTokensFeature(client));
   client.start();
 
@@ -95,12 +115,15 @@ function configureEditorForBicep(editor: monacoEditor.editor.IStandaloneCodeEdit
         return { foreground: 0 };
     }
   };
+
+  return client;
 }
 
 export const BicepEditor: React.FC<Props> = (props) => {
   const monacoRef = useRef<MonacoEditor>();
   const [initialCode, setInitialCode] = useState(props.initialCode);
   const [bicepContent, setBicepContent] = useState(props.initialCode);
+  let client: MonacoLanguageClient;
 
   const options: monacoEditor.editor.IStandaloneEditorConstructionOptions = {
     scrollBeyondLastLine: false,
@@ -113,23 +136,19 @@ export const BicepEditor: React.FC<Props> = (props) => {
 
   const handleContentChange = (editor: monacoEditor.editor.IStandaloneCodeEditor, text: string) => {
     setBicepContent(text);
-    makeLspRequest(JSON.stringify({
-      "jsonrpc":"2.0",
-      "method":"textDocument/didOpen",
-      "params": {
-          "textDocument": {
-              "uri": "inmemory:///main.bicep",
-              "languageId": "bicep",
-              "version": 1,
-              "text": editor.getModel().getValue(),
-          }
+    client.sendNotification(DidOpenTextDocumentNotification.type, {
+      textDocument: {
+        "uri": "inmemory:///main.bicep",
+        "languageId": "bicep",
+        "version": 1,
+        "text": editor.getModel().getValue(),
       }
-    }));
+    });
   }
 
   const handleEditorDidMount = (editor: monacoEditor.editor.IStandaloneCodeEditor, monaco: typeof monacoEditor) => {
-    configureEditorForBicep(editor, monaco);
-    handleContentChange(editor, bicepContent);
+    client = configureEditorForBicep(editor, monaco);
+    client.onReady().then(() => handleContentChange(editor, bicepContent));
   }
 
   if (initialCode != props.initialCode) {

@@ -6,16 +6,17 @@ using System.Threading.Tasks;
 using Bicep.Core.Navigation;
 using Bicep.LanguageServer.Providers;
 using Bicep.LanguageServer.Utils;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Bicep.LanguageServer.Handlers
 {
-    public class BicepDocumentHighlightHandler : DocumentHighlightHandler
+    public class BicepDocumentHighlightHandler : DocumentHighlightHandlerBase
     {
         private readonly ISymbolResolver symbolResolver;
 
-        public BicepDocumentHighlightHandler(ISymbolResolver symbolResolver) : base(CreateRegistrationOptions())
+        public BicepDocumentHighlightHandler(ISymbolResolver symbolResolver)
         {
             this.symbolResolver = symbolResolver;
         }
@@ -41,7 +42,7 @@ namespace Bicep.LanguageServer.Handlers
             return Task.FromResult<DocumentHighlightContainer?>(new DocumentHighlightContainer(highlights));
         }
 
-        private static DocumentHighlightRegistrationOptions CreateRegistrationOptions() =>
+        protected override DocumentHighlightRegistrationOptions CreateRegistrationOptions(DocumentHighlightCapability capability, ClientCapabilities clientCapabilities) =>
             new DocumentHighlightRegistrationOptions
             {
                 DocumentSelector = DocumentSelectorFactory.Create()

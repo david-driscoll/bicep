@@ -8,18 +8,18 @@ using Bicep.LanguageServer.CompilationManager;
 using Bicep.LanguageServer.Utils;
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 
 namespace Bicep.LanguageServer.Handlers
 {
-    public class BicepTextDocumentSyncHandler : TextDocumentSyncHandler
+    public class BicepTextDocumentSyncHandler : TextDocumentSyncHandlerBase
     {
         private readonly ICompilationManager compilationManager;
 
         public BicepTextDocumentSyncHandler(ICompilationManager compilationManager)
-            : base(TextDocumentSyncKind.Full, GetSaveRegistrationOptions())
         {
             this.compilationManager = compilationManager;
         }
@@ -46,7 +46,7 @@ namespace Bicep.LanguageServer.Handlers
             this.compilationManager.UpsertCompilation(request.TextDocument.Uri, request.TextDocument.Version, request.TextDocument.Text);
 
             Console.WriteLine(request.TextDocument.Uri.ToString());
-            
+
             return Unit.Task;
         }
 
@@ -62,11 +62,12 @@ namespace Bicep.LanguageServer.Handlers
             return Unit.Task;
         }
 
-        private static TextDocumentSaveRegistrationOptions GetSaveRegistrationOptions()
-            => new TextDocumentSaveRegistrationOptions
+        protected override TextDocumentSyncRegistrationOptions CreateRegistrationOptions(SynchronizationCapability capability, ClientCapabilities clientCapabilities)
+            => new TextDocumentSyncRegistrationOptions
             {
+                Change = TextDocumentSyncKind.Full,
                 DocumentSelector = DocumentSelectorFactory.Create(),
-                IncludeText = true,
+                Save = new SaveOptions() { IncludeText = true },
             };
     }
 }

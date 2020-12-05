@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.IO.Pipelines;
+using System.Reactive.Concurrency;
 using System.Threading;
 using System.Threading.Tasks;
 using Bicep.Core.Emit;
@@ -17,6 +18,8 @@ using Bicep.LanguageServer.Providers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Server;
+using OmniSharp.Extensions.LanguageServer.Protocol.Window;
+using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using OmnisharpLanguageServer = OmniSharp.Extensions.LanguageServer.Server.LanguageServer;
 
 namespace Bicep.LanguageServer
@@ -27,7 +30,7 @@ namespace Bicep.LanguageServer
         {
             private class Scope : IDisposable
             {
-                public void Dispose() {}
+                public void Dispose() { }
             }
 
             public IDisposable BeginScope<TState>(TState state) => new Scope();
@@ -38,11 +41,11 @@ namespace Bicep.LanguageServer
                 => Console.WriteLine($"[{logLevel}] {formatter(state, exception)}");
         }
 
-        public void AddProvider(ILoggerProvider provider) {}
+        public void AddProvider(ILoggerProvider provider) { }
 
         public ILogger CreateLogger(string categoryName) => new TestLogger();
 
-        public void Dispose() {}
+        public void Dispose() { }
     }
 
     public class Server
@@ -52,6 +55,8 @@ namespace Bicep.LanguageServer
             public IResourceTypeProvider? ResourceTypeProvider { get; set; }
 
             public IFileResolver? FileResolver { get; set; }
+
+            public IServiceCollection Services { get; set; } = new ServiceCollection();
         }
 
         private readonly OmnisharpLanguageServer server;
@@ -65,7 +70,7 @@ namespace Bicep.LanguageServer
             : this(creationOptions, options => options.WithInput(input).WithOutput(output))
         {
         }
-        
+
         private Server(CreationOptions creationOptions, Action<LanguageServerOptions> onOptionsFunc)
         {
             BicepDeploymentsInterop.Initialize();
@@ -88,7 +93,14 @@ namespace Bicep.LanguageServer
 #pragma warning restore 0612
                     .WithServices(services => RegisterServices(creationOptions, services));
 
+                // foreach (var descriptor in creationOptions.Services)
+                // {
+                //     options.Services.Add(descriptor);
+                // }
+                options.Services.AddSingleton<IScheduler>(ImmediateScheduler.Instance);
+
                 options.WithLoggerFactory(new TestLoggerFactory());
+                options.ConfigureLogging(z => z.AddLanguageProtocolLogging());
 
                 onOptionsFunc(options);
             });
@@ -96,8 +108,11 @@ namespace Bicep.LanguageServer
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
-            try {
+            try
+            {
                 Console.WriteLine("RunAsync: Running!");
+
+                var wasStarted = server.WasStarted;
 
                 await server.Initialize(cancellationToken);
 

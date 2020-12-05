@@ -7,16 +7,17 @@ using Bicep.Core.Semantics;
 using Bicep.LanguageServer.Extensions;
 using Bicep.LanguageServer.Providers;
 using Bicep.LanguageServer.Utils;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Bicep.LanguageServer.Handlers
 {
-    public class BicepDefinitionHandler : DefinitionHandler
+    public class BicepDefinitionHandler : DefinitionHandlerBase
     {
         private readonly ISymbolResolver symbolResolver;
 
-        public BicepDefinitionHandler(ISymbolResolver symbolResolver) : base(CreateRegistrationOptions())
+        public BicepDefinitionHandler(ISymbolResolver symbolResolver)
         {
             this.symbolResolver = symbolResolver;
         }
@@ -48,7 +49,7 @@ namespace Bicep.LanguageServer.Handlers
             return Task.FromResult(new LocationOrLocationLinks());
         }
 
-        private static DefinitionRegistrationOptions CreateRegistrationOptions() =>
+        protected override DefinitionRegistrationOptions CreateRegistrationOptions(DefinitionCapability capability, ClientCapabilities clientCapabilities) =>
             new DefinitionRegistrationOptions
             {
                 DocumentSelector = DocumentSelectorFactory.Create()

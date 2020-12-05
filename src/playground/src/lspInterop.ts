@@ -1,53 +1,39 @@
-import { editor, languages } from 'monaco-editor/esm/vs/editor/editor.api';
+import { editor, languages } from "monaco-editor/esm/vs/editor/editor.api";
 
 let interop;
 
 export function initializeInterop(self): Promise<boolean> {
   return new Promise<boolean>((resolve, reject) => {
-    self['BicepInitialize'] = (newInterop) => {
+    self["BicepInitialize"] = (newInterop) => {
       interop = newInterop;
       resolve(true);
-    }
-  
-    const test = require('../../Bicep.Wasm/bin/Release/net5.0/wwwroot/_framework/blazor.webassembly.js');  
+    };
+
+    const test = require("../../Bicep.Wasm/bin/Release/net5.0/wwwroot/_framework/blazor.webassembly.js");
   });
 }
 
 export function getSemanticTokensLegend(): languages.SemanticTokensLegend {
-  return interop.invokeMethod('GetSemanticTokensLegend');
+  return interop.invokeMethod("GetSemanticTokensLegend");
 }
 
 export function getSemanticTokens(content: string): languages.SemanticTokens {
-  return interop.invokeMethod('GetSemanticTokens', content);
+  return interop.invokeMethod("GetSemanticTokens", content);
 }
 
-export function compileAndEmitDiagnostics(content: string): {template: string, diagnostics: editor.IMarkerData[]} {
-  return interop.invokeMethod('CompileAndEmitDiagnostics', content);
+export function compileAndEmitDiagnostics(
+  content: string
+): { template: string; diagnostics: editor.IMarkerData[] } {
+  return interop.invokeMethod("CompileAndEmitDiagnostics", content);
 }
 
 export async function makeLspRequest(jsonRpcRequest: string) {
   console.log(`SND: ${jsonRpcRequest}`);
-  return await interop.invokeMethodAsync('MakeLspRequestAsync', jsonRpcRequest);
-}
-
-export async function runLspMessageLoop(onMessage: (message: string) => void) {
-  self['ReceiveLspRequest'] = (message: string) => {
-    console.log(`RCV: ${message}`);
-    onMessage(message);
-  };
-  try {
-    const result = await interop.invokeMethodAsync('RunLspMessageLoopAsync');
-    console.log(`result: ${result}`);
-    return result;
-  }
-  catch {
-    console.log('sadfsdf');
-    throw 'failure';
-  }
+  return await interop.invokeMethodAsync("SendLspDataAsync", jsonRpcRequest);
 }
 
 export function decompile(jsonContent: string): string {
-  const { bicepFile, error } = interop.invokeMethod('Decompile', jsonContent);
+  const { bicepFile, error } = interop.invokeMethod("Decompile", jsonContent);
 
   if (error) {
     throw error;

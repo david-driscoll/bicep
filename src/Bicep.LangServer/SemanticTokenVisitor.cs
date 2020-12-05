@@ -114,7 +114,7 @@ namespace Bicep.LanguageServer
             }
             else
             {
-                AddTokenType(syntax.Key, SemanticTokenType.Member);
+                AddTokenType(syntax.Key, SemanticTokenType.Property);
             }
             base.VisitObjectPropertySyntax(syntax);
         }
@@ -180,13 +180,15 @@ namespace Bicep.LanguageServer
 
         private void AddStringToken(Token token)
         {
-            var endInterp = token.Type switch {
+            var endInterp = token.Type switch
+            {
                 TokenType.StringLeftPiece => LanguageConstants.StringHoleOpen,
                 TokenType.StringMiddlePiece => LanguageConstants.StringHoleOpen,
                 _ => "",
             };
 
-            var startInterp = token.Type switch {
+            var startInterp = token.Type switch
+            {
                 TokenType.StringMiddlePiece => LanguageConstants.StringHoleClose,
                 TokenType.StringRightPiece => LanguageConstants.StringHoleClose,
                 _ => "",

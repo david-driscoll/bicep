@@ -8,16 +8,17 @@ using Bicep.Core.Semantics;
 using Bicep.Core.Syntax;
 using Bicep.LanguageServer.Providers;
 using Bicep.LanguageServer.Utils;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Bicep.LanguageServer.Handlers
 {
-    public class BicepHoverHandler : HoverHandler
+    public class BicepHoverHandler : HoverHandlerBase
     {
         private readonly ISymbolResolver symbolResolver;
 
-        public BicepHoverHandler(ISymbolResolver symbolResolver) : base(CreateRegistrationOptions())
+        public BicepHoverHandler(ISymbolResolver symbolResolver)
         {
             this.symbolResolver = symbolResolver;
         }
@@ -47,7 +48,7 @@ namespace Bicep.LanguageServer.Handlers
             });
         }
 
-        private static HoverRegistrationOptions CreateRegistrationOptions() =>
+        protected override HoverRegistrationOptions CreateRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities) =>
             new HoverRegistrationOptions
             {
                 DocumentSelector = DocumentSelectorFactory.Create()
@@ -55,7 +56,7 @@ namespace Bicep.LanguageServer.Handlers
 
         private static string? GetMarkdown(SymbolResolutionResult result)
         {
-            // all of the generated markdown includes the language id to avoid VS code rendering 
+            // all of the generated markdown includes the language id to avoid VS code rendering
             // with multiple borders
             switch (result.Symbol)
             {
@@ -108,7 +109,7 @@ namespace Bicep.LanguageServer.Handlers
             {
                 var argumentType = model.GetTypeInfo(argumentSyntax);
                 buffer.Append(argumentType);
-                
+
                 buffer.Append(argumentSeparator);
             }
 

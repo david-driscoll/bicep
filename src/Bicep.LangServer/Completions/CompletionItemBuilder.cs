@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 using System;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -8,101 +9,102 @@ namespace Bicep.LanguageServer.Completions
 {
     public static class CompletionItemBuilder
     {
-        public static CompletionItem Create(CompletionItemKind kind) => new CompletionItem {Kind = kind};
+        public static CompletionItem Create(CompletionItemKind kind) => new CompletionItem { Kind = kind };
 
         public static CompletionItem WithLabel(this CompletionItem item, string label)
         {
-            item.Label = label;
-            return item;
+            return item with { Label = label };
         }
 
         public static CompletionItem WithInsertText(this CompletionItem item, string insertText, InsertTextMode insertTextMode = InsertTextMode.AsIs)
         {
             AssertNoTextEdit(item);
 
-            item.InsertText = insertText;
-            item.InsertTextFormat = InsertTextFormat.PlainText;
-            item.InsertTextMode = insertTextMode;
-
-            return item;
+            return item with
+            {
+                InsertText = insertText,
+                InsertTextFormat = InsertTextFormat.PlainText,
+                InsertTextMode = insertTextMode,
+            };
         }
 
         public static CompletionItem WithSnippet(this CompletionItem item, string snippet, InsertTextMode insertTextMode = InsertTextMode.AsIs)
         {
             AssertNoTextEdit(item);
 
-            item.InsertText = snippet;
-            item.InsertTextFormat = InsertTextFormat.Snippet;
-            item.InsertTextMode = insertTextMode;
-
-            return item;
+            return item with
+            {
+                InsertText = snippet,
+                InsertTextFormat = InsertTextFormat.PlainText,
+                InsertTextMode = insertTextMode,
+            };
         }
 
         public static CompletionItem WithPlainTextEdit(this CompletionItem item, Range range, string text, InsertTextMode insertTextMode = InsertTextMode.AsIs)
         {
             AssertNoInsertText(item);
-            SetTextEditInternal(item, range, InsertTextFormat.PlainText, text, insertTextMode);
+            item = SetTextEditInternal(item, range, InsertTextFormat.PlainText, text, insertTextMode);
             return item;
         }
 
         public static CompletionItem WithSnippetEdit(this CompletionItem item, Range range, string snippet, InsertTextMode insertTextMode = InsertTextMode.AsIs)
         {
             AssertNoInsertText(item);
-            SetTextEditInternal(item, range, InsertTextFormat.Snippet, snippet, insertTextMode);
+            item = SetTextEditInternal(item, range, InsertTextFormat.Snippet, snippet, insertTextMode);
             return item;
         }
 
         public static CompletionItem WithAdditionalEdits(this CompletionItem item, TextEditContainer editContainer)
         {
-            item.AdditionalTextEdits = editContainer;
-            return item;
+            return item with { AdditionalTextEdits = editContainer };
         }
 
         public static CompletionItem WithDetail(this CompletionItem item, string detail)
         {
-            item.Detail = detail;
-            return item;
+            return item with { Detail = detail };
         }
 
         public static CompletionItem WithDocumentation(this CompletionItem item, string markdown)
         {
-            item.Documentation = new StringOrMarkupContent(new MarkupContent
+            return item with
             {
-                Kind = MarkupKind.Markdown,
-                Value = markdown
-            });
-            return item;
+                Documentation = new StringOrMarkupContent(new MarkupContent
+                {
+                    Kind = MarkupKind.Markdown,
+                    Value = markdown
+                })
+            };
         }
 
         public static CompletionItem WithSortText(this CompletionItem item, string sortText)
         {
-            item.SortText = sortText;
-            return item;
+            return item with { SortText = sortText };
         }
 
         public static CompletionItem Preselect(this CompletionItem item) => item.Preselect(preselect: true);
 
         public static CompletionItem Preselect(this CompletionItem item, bool preselect)
         {
-            item.Preselect = preselect;
-            return item;
+            return item with { Preselect = preselect };
         }
 
         public static CompletionItem WithCommitCharacters(this CompletionItem item, Container<string> commitCharacters)
         {
-            item.CommitCharacters = commitCharacters;
-            return item;
+            return item with { CommitCharacters = commitCharacters };
         }
 
-        private static void SetTextEditInternal(CompletionItem item, Range range, InsertTextFormat format, string text, InsertTextMode insertTextMode)
+        private static CompletionItem SetTextEditInternal(CompletionItem item, Range range, InsertTextFormat format, string text, InsertTextMode insertTextMode)
         {
-            item.InsertTextFormat = format;
-            item.TextEdit = new TextEdit
+            return item with
             {
-                Range = range,
-                NewText = text
+                InsertTextFormat = format,
+                TextEdit = new TextEdit
+                {
+                    Range = range,
+                    NewText = text
+                },
+                InsertTextMode = insertTextMode
             };
-            item.InsertTextMode = insertTextMode;
         }
 
         private static void AssertNoTextEdit(CompletionItem item)
